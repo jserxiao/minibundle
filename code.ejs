@@ -1,0 +1,14 @@
+(function(entry,graph){
+		var exports = {};
+		var obj = JSON.parse(graph);
+		function analize(entryVal){
+			function localRequire(r_entry){
+				analize(obj[entryVal].dependencies[r_entry])
+				return exports;
+			}
+			return (function(require, exports, code){
+				eval(code)
+			})(localRequire, exports, obj[entryVal].code)
+		}
+		analize(entry)
+	})('<%- entry %>',`<%- JSON.stringify(graph) %>`)

@@ -3,6 +3,8 @@ const fs = require('fs')
 const core = require('@babel/core')
 const traverse = require('@babel/traverse').default
 const parser = require('@babel/parser')
+const generate = require("@babel/generator").default
+const ejs = require('ejs')
 
 const {
 	entry,
@@ -29,7 +31,7 @@ function launchTraverse(ast, entryPath) {
 	traverse(ast, {
 		ImportDeclaration(node) {
 			if (!node.node.source.value) return;
-			const nodePath = './' + path.relative(__dirname, path.resolve(path.dirname(entryPath), node.node.source.value));
+			const nodePath = '.\\' + path.relative(__dirname, path.resolve(path.dirname(entryPath), node.node.source.value));
 			dependencies[node.node.source.value] = nodePath;
 		}
 	})
@@ -54,7 +56,7 @@ function getGraph(entryVal) {
 	const ast = getAst(entryVal);
 	const dependencies = launchTraverse(ast, entryPath);
 
-	const rootRelatePath = './' + path.relative(__dirname, entryPath);
+	const rootRelatePath = '.\\' + path.relative(__dirname, entryPath);
 	graph[rootRelatePath] = {
 		code: getTransformCode(ast, useEs6),
 		dependencies
@@ -70,24 +72,23 @@ function getGraph(entryVal) {
 	return graph;
 }
 
-function evalCode(entryVal) {
-	getGraph(entryVal);
-	return `(function(entry,graph){
-		var exports = {};
-		var obj = JSON.parse(graph)
-		function localRequire(entry){
-			return obj[entry].code
-		}
-		(function(require, exports, code){
-			eval(code)
-		})(localRequire, exports, obj[entry].code)
-	})('${entryVal}','${JSON.stringify(graph)}')`;
+function getEjsStr(){
+	const ejsCode = fs.readFileSync('code.ejs', 'utf-8');
+	return ejs.render(ejsCode, {
+		entry,
+		graph
+	})
 }
 
-const outputCode = evalCode(entry);
-try{
-	fs.accessSync(path.dirname(outputDir))
-}catch(e){
-	fs.mkdirSync(path.dirname(outputDir));
+function evalCode(entryVal) {
+	getGraph(entryVal);
+	const outputCode = getEjsStr().replace(/\\n/g, "").replace(/\\"/g, "'").replace(/\\/g, '/').replace(/\/\//g, '/');
+	try{
+		fs.accessSync(path.dirname(outputDir))
+	}catch(e){
+		fs.mkdirSync(path.dirname(outputDir));
+	}
+	fs.writeFileSync(outputDir, outputCode)
 }
-fs.writeFileSync(outputDir, outputCode)
+
+evalCode(entry)
